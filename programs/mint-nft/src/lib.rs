@@ -251,5 +251,67 @@ pub mod mint_nft {
 
         Ok(())
     }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn create_edition_account(ctx: Context<CreatePrintEditionContext>, edition: u64) -> Result<()> {
+        let edition_metadata_account = &ctx.accounts.edition_metadata_account;
+        let edition_account = &ctx.accounts.edition_account;
+        let master_edition_account = &ctx.accounts.master_edition_account;
+        let edition_mint = &ctx.accounts.edition_mint;
+        let edition_mark_pda = &ctx.accounts.edition_mark_pda;
+        let edition_mint_authority = &ctx.accounts.edition_mint_authority;
+        let payer = &ctx.accounts.payer;
+        let token_account_owner = &ctx.accounts.token_account_owner;
+        let token_account = &ctx.accounts.token_account;
+        let edition_update_authority = &ctx.accounts.edition_update_authority;
+        let metadata_account = &ctx.accounts.metadata_account;
+        let metadata_mint = &ctx.accounts.metadata_mint;
+        let token_program = &ctx.accounts.token_program;
+        let system_program = &ctx.accounts.system_program;
+        let token_metadata_program = &ctx.accounts.token_metadata_program;
+        let rent = &ctx.accounts.rent;
+
+        let instruction = mpl_token_metadata::instruction::mint_new_edition_from_master_edition_via_token(
+            TOKEN_METADATA_ID,
+            edition_metadata_account.key(),
+            edition_account.key(), 
+            master_edition_account.key(), 
+            edition_mint.key(), 
+            edition_mint_authority.key(),
+            payer.key(), 
+            token_account_owner.key(), 
+            token_account.key(), 
+            edition_update_authority.key(), 
+            metadata_account.key(),
+            metadata_mint.key(), 
+            edition
+        );
+
+        msg!("DEBUG: Create edition instruction {:?}", instruction.accounts[4]);
+
+        invoke(&instruction, &[
+            edition_metadata_account.to_account_info(),
+            edition_account.to_account_info(),
+            master_edition_account.to_account_info(),
+            edition_mint.to_account_info(),
+            edition_mark_pda.to_account_info(),
+            edition_mint_authority.to_account_info(),
+            payer.to_account_info(),
+            token_account_owner.to_account_info(),
+            token_account.to_account_info(),
+            edition_update_authority.to_account_info(),
+            metadata_account.to_account_info(),
+            metadata_mint.to_account_info(),
+            token_program.to_account_info(),
+            system_program.to_account_info(),
+            token_metadata_program.to_account_info(),
+            rent.to_account_info(),
+        ]).expect("CPI failed");
+
+        Ok(())
+    }
+
+    // pub fn calculate_mark_pda(ctx)
+
 }
 

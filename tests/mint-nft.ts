@@ -7,7 +7,8 @@ import * as ssl from "@coin98/solana-support-library"
 import {
   getMint, getOrCreateAssociatedTokenAccount,
 } from '@solana/spl-token';
-import { Connection } from "@solana/web3.js";
+import { Connection, LAMPORTS_PER_SOL, SystemProgram } from "@solana/web3.js";
+import { findProgramAddressSync } from "@project-serum/anchor/dist/cjs/utils/pubkey";
 
 describe("mint-nft", () => {
   // Configure the client to use the local cluster.
@@ -19,11 +20,17 @@ describe("mint-nft", () => {
     "metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s"
   );
 
+  // Keypair and public key of master edition
   let root: anchor.web3.Keypair;
-  let tokenAddress: anchor.web3.PublicKey;
+  let rootATA: anchor.web3.PublicKey;
   let mintKeypair: anchor.web3.Keypair;
   let metadataAddress: anchor.web3.PublicKey;
   let masterEditionAddress: anchor.web3.PublicKey;
+
+  // Keypair and public key of edition
+  let editionMintAddress: anchor.web3.Keypair;
+  let recipientEditionOwner: anchor.web3.Keypair;
+  let recipientATA: anchor.web3.PublicKey;
 
   const connection = new Connection('https://api.devnet.solana.com', 'confirmed');
   
@@ -32,14 +39,14 @@ describe("mint-nft", () => {
     console.log(`Root: ${root.publicKey}`);
 
     mintKeypair = anchor.web3.Keypair.generate();
-    tokenAddress = await anchor.utils.token.associatedAddress({
+    rootATA = await anchor.utils.token.associatedAddress({
       mint: mintKeypair.publicKey,
       owner: root.publicKey
     });
     console.log(`New token: ${mintKeypair.publicKey}`);
-    console.log(`New token address: ${tokenAddress}`);
-    const mintInfo = await getMint(connection, mintKeypair.publicKey);
-    console.log(`Mint info:`, mintInfo);
+    console.log(`New token address: ${rootATA}`);
+    // const mintInfo = await getMint(connection, mintKeypair.publicKey);
+    // console.log(`Mint info:`, mintInfo);
   })
 
   it('Create Mint account', async () => {
@@ -51,8 +58,8 @@ describe("mint-nft", () => {
     console.log(`Create mint account tx:`, tx);
     await new Promise(f => setTimeout(f, 100));
     
-    const mintInfo = await getMint(connection, mintKeypair.publicKey);
-    console.log(`Mint info:`, mintInfo);
+    // const mintInfo = await getMint(connection, mintKeypair.publicKey);
+    // console.log(`Mint info:`, mintInfo);
   });
 
   it('Initialize Mint account', async () => {
@@ -75,7 +82,7 @@ describe("mint-nft", () => {
       associatedTokenProgram: ssl.ASSOCIATED_TOKEN_ACCOUNT_PROGRAM_ID,
       mint: mintKeypair.publicKey,
       authority: root.publicKey,
-      associatedToken: tokenAddress,
+      associatedToken: rootATA,
     }).signers([root, mintKeypair]).rpc();
     console.log(`Create ATA tx:`, tx);
     await new Promise(f => setTimeout(f, 100));
@@ -94,7 +101,7 @@ describe("mint-nft", () => {
       mint: mintKeypair.publicKey,
       authority: root.publicKey,
       tokenProgram: TOKEN_PROGRAM_ID,
-      tokenAccount: tokenAddress,
+      tokenAccount: rootATA,
       payer: root.publicKey,
     }).signers([mintKeypair, root]).rpc();
     console.log(`Mint token to ATA tx:`, tx);
@@ -149,7 +156,7 @@ describe("mint-nft", () => {
   });
 
   it('Create master edition account', async () => {
-    masterEditionAddress = await anchor.web3.PublicKey.findProgramAddressSync(
+    masterEditionAddress = anchor.web3.PublicKey.findProgramAddressSync(
       [
         Buffer.from('metadata'),
         TOKEN_METADATA_PROGRAM_ID.toBuffer(),
@@ -170,5 +177,124 @@ describe("mint-nft", () => {
     }).signers([root]).rpc().catch(e => console.log(e));
     console.log(`Create metadata account tx:`, tx);
   })
+
+  it('Create edition account', async () => {
+
+    editionMintAddress = anchor.web3.Keypair.generate();
+    console.log(`Edition mint address:`, editionMintAddress.publicKey.toBase58());
+    recipientEditionOwner = anchor.web3.Keypair.generate();
+    console.log(`Recipient edition owner:`, recipientEditionOwner.publicKey.toBase58());
+
+    const airdropSignature = await connection.requestAirdrop(
+      recipientEditionOwner.publicKey,
+      LAMPORTS_PER_SOL,
+    );
+    
+    await connection.confirmTransaction(airdropSignature);
+
+    // Create mint of edition account and initialize
+    const createMintAccountTx = await program.methods.createMintAccount().accounts({
+      mint: editionMintAddress.publicKey,
+      mintAuthority: recipientEditionOwner.publicKey,
+      tokenProgram: TOKEN_PROGRAM_ID,
+    }).signers([recipientEditionOwner, editionMintAddress]).rpc().catch(e => console.log(e));
+    console.log(`Create mint account tx:`, createMintAccountTx);
+
+    const initializeMintTx = await program.methods.initializeMint().accounts({
+      mint: editionMintAddress.publicKey,
+      mintAuthority: recipientEditionOwner.publicKey,
+      tokenProgram: TOKEN_PROGRAM_ID,
+    }).signers([recipientEditionOwner, editionMintAddress]).rpc();
+    console.log(`Initialize mint tx:`, initializeMintTx);
+
+    // Create ATA for recipient
+    recipientATA = await anchor.utils.token.associatedAddress({
+      mint: editionMintAddress.publicKey,
+      owner: recipientEditionOwner.publicKey
+    });
+
+    const createATATx = await program.methods.createAssociatedTokenAccount().accounts({
+      payer: root.publicKey,
+      tokenProgram: TOKEN_PROGRAM_ID,
+      associatedTokenProgram: ssl.ASSOCIATED_TOKEN_ACCOUNT_PROGRAM_ID,
+      mint: editionMintAddress.publicKey,
+      authority: recipientEditionOwner.publicKey,
+      associatedToken: recipientATA,
+    }).signers([root, editionMintAddress, recipientEditionOwner]).rpc();
+    console.log(`Create ATA tx:`, createATATx);
+
+    const recipientATAAmount = await getOrCreateAssociatedTokenAccount(
+      connection,
+      root,
+      editionMintAddress.publicKey,
+      recipientEditionOwner.publicKey
+    );
+    console.log('Recipient ATA', recipientATAAmount.amount);
+
+    // Create edition account
+    const editionMetadataAddress = anchor.web3.PublicKey.findProgramAddressSync(
+      [
+        Buffer.from('metadata'),
+        TOKEN_METADATA_PROGRAM_ID.toBuffer(),
+        editionMintAddress.publicKey.toBuffer(),
+      ], 
+      TOKEN_METADATA_PROGRAM_ID,
+    )[0];
+      console.log(`Edition metadata address:`, editionMetadataAddress.toBase58());
+
+    const editionAddress = anchor.web3.PublicKey.findProgramAddressSync(
+      [
+        Buffer.from('metadata'),
+        TOKEN_METADATA_PROGRAM_ID.toBuffer(),
+        editionMintAddress.publicKey.toBuffer(),
+        Buffer.from('edition'),
+      ], 
+      TOKEN_METADATA_PROGRAM_ID,
+    )[0];
+      console.log(`Edition address:`, editionAddress.toBase58());
+
+    // Mint token 
+    const mintTx = await program.methods.mintToken(new anchor.BN(1)).accounts({
+      mint: editionMintAddress.publicKey,
+      authority: recipientEditionOwner.publicKey,
+      tokenProgram: TOKEN_PROGRAM_ID,
+      tokenAccount: recipientATA,
+      payer: root.publicKey,
+    }).signers([editionMintAddress, root, recipientEditionOwner]).rpc();
+    console.log(`Mint token to ATA tx:`, mintTx);
+
+    const encoder = new TextEncoder();
+    const [editionMarkPda, editionMarkBump] = findProgramAddressSync([
+        encoder.encode('metadata'),
+        TOKEN_METADATA_PROGRAM_ID.toBuffer(),
+        mintKeypair.publicKey.toBuffer(),
+        encoder.encode('edition'),
+        encoder.encode(String(0)),
+    ],
+    TOKEN_METADATA_PROGRAM_ID
+    )
+    console.log(`Edition mark PDA:`, editionMarkPda.toBase58());
+
+    const tx = await program.methods.createEditionAccount(new anchor.BN(1)).accounts({
+      editionMetadataAccount: editionMetadataAddress,
+      editionAccount: editionAddress,
+      masterEditionAccount: masterEditionAddress,
+      editionMint: editionMintAddress.publicKey,
+      editionMarkPda: editionMarkPda,
+      editionMintAuthority: recipientEditionOwner.publicKey,
+      payer: root.publicKey,
+      tokenAccountOwner: root.publicKey,
+      tokenAccount: rootATA,
+      editionUpdateAuthority: recipientEditionOwner.publicKey,
+      metadataAccount: metadataAddress,
+      metadataMint: mintKeypair.publicKey,
+      tokenMetadataProgram: TOKEN_METADATA_PROGRAM_ID,
+      tokenProgram: TOKEN_PROGRAM_ID,
+      systemProgram: SystemProgram.programId,
+      rent: anchor.web3.SYSVAR_RENT_PUBKEY,
+    }).signers([recipientEditionOwner, root])
+    .rpc();
+    console.log(`Create edition account tx:`, tx);
+  });
 
 });
