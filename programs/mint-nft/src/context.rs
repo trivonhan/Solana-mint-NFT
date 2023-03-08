@@ -3,12 +3,6 @@ use anchor_lang::{
     system_program::System,
 };
 
-use crate::instruction;
-use crate::{
-    state::*,
-    constant::*,
-};
-
 #[derive(Accounts)]
 pub struct CreateMintAccountContext<'info> {
     
@@ -210,8 +204,80 @@ pub struct CreatePrintEditionContext<'info> {
     pub rent: Sysvar<'info, Rent>,
 }
 
-// #[derive(Accounts)]
-// pub struct ComputeEditionMarkPda<'info> {
-//     #[account]
+#[derive(Accounts)]
+pub struct BurnEditionContext<'info> {
 
-// }
+    /// CHECK: Metadata account of edition (pda of ['metadata', program id, mint id])
+    #[account(mut)]
+    pub edition_metadata_account: AccountInfo<'info>,
+
+    #[account(mut)]
+    pub nft_owner: Signer<'info>,
+
+    /// CHECK: Mint of new edition token 
+    #[account(mut)]
+    pub edition_mint: AccountInfo<'info>,
+
+    /// CHECK: Mint of master edition token
+    #[account(mut)]
+    pub master_edition_mint: AccountInfo<'info>,
+
+    /// CHECK: Token account of edition mint token
+    #[account(mut)]
+    pub edition_token_account: AccountInfo<'info>,
+
+    /// CHECK: Token account of master edition mint token
+    #[account(mut)]
+    pub master_edition_token_account: AccountInfo<'info>,
+
+    /// CHECK: Master edition account (pda of ['metadata', program id, mint id, 'edition'])
+    #[account(mut)]
+    pub master_edition_account: AccountInfo<'info>,
+
+    /// CHECK: Edition account (pda of ['metadata', program id, mint id, 'edition'])
+    #[account(mut)]
+    pub edition_account: AccountInfo<'info>,
+
+    /// CHECK: Edition pda to mark creation - will be checked for pre-existence.
+    /// (pda of ['metadata', program id, master metadata mint id, 'edition', edition_number])
+    /// edition_number is NOT the edition number you pass in args but actually 
+    /// edition_number = floor(edition/EDITION_MARKER_BIT_SIZE).
+    #[account(mut)]
+    pub edition_mark_pda: AccountInfo<'info>,
+
+    /// CHECK: Token program ID (default = TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA)
+    pub token_program: AccountInfo<'info>,
+
+    /// CHECK: Metaplex will check this
+    pub token_metadata_program: UncheckedAccount<'info>,
+    
+}
+
+#[derive(Accounts)]
+pub struct BurnMasterEditionContext<'info> {
+
+    /// CHECK: Metadata account of master edition 
+    #[account(mut)]
+    pub master_edition_metadata: AccountInfo<'info>,
+
+    #[account(mut)]
+    pub owner: Signer<'info>,
+
+    /// CHECK: Mint account (ERC20) of master edition
+    #[account(mut)]
+    pub master_edition_mint: AccountInfo<'info>,
+
+    /// CHECK: Associated token account to store master edition
+    #[account(mut)]
+    pub master_edition_token_account: AccountInfo<'info>,
+
+    /// CHECK: Master edition account (pda of ['metadata', program id, mint id, 'edition'])
+    #[account(mut)]
+    pub master_edition_account: AccountInfo<'info>,
+
+    /// CHECK: Token program ID (default = TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA)
+    pub token_program: AccountInfo<'info>,
+
+    /// CHECK: Metaplex will check this
+    pub token_metadata_program: UncheckedAccount<'info>,
+}

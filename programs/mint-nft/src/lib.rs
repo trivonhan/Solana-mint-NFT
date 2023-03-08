@@ -24,7 +24,6 @@ pub mod context;
 pub mod state;
 
 use crate::{
-    constant::*,
     context::*,
     state::*,
 };
@@ -36,29 +35,6 @@ pub struct TransferTokenParams {
     pub instruction: u8,
     pub amount: u64,
 }
-
-#[repr(C)]
-#[cfg_attr(feature = "serde-feature", derive(Serialize, Deserialize))]
-#[derive(AnchorSerialize, AnchorDeserialize, PartialEq, Eq, Debug, Clone)]
-/// Args for create call
-pub struct CreateMetadataAccountArgsV3 {
-    /// Note that unique metadatas are disabled for now.
-    pub data: DataV2,
-    /// Whether you want your metadata to be updateable in the future.
-    pub is_mutable: bool,
-}
-#[derive(AnchorSerialize, AnchorDeserialize, PartialEq, Eq, Debug, Clone)]
-pub struct DataV2 {
-    /// The name of the asset
-    pub name: String,
-    /// The symbol for the asset
-    pub symbol: String,
-    /// URI pointing to JSON representing the asset
-    pub uri: String,
-    /// Royalty basis points that goes to creators in secondary sales (0-10000)
-    pub seller_fee_basis_points: u16,
-}
-
 
 #[program]
 pub mod mint_nft {
@@ -311,7 +287,83 @@ pub mod mint_nft {
         Ok(())
     }
 
-    // pub fn calculate_mark_pda(ctx)
+    pub fn burn_edition_nft(ctx: Context<BurnEditionContext>) -> Result<()> {
+        let edition_metadata_account = &ctx.accounts.edition_metadata_account;
+        let nft_owner = &ctx.accounts.nft_owner;
+        let edition_mint = &ctx.accounts.edition_mint;
+        let master_edition_mint = &ctx.accounts.master_edition_mint;
+        let edition_token_account = &ctx.accounts.edition_token_account;
+        let master_edition_token_account = &ctx.accounts.master_edition_token_account;
+        let master_edition_account = &ctx.accounts.master_edition_account;
+        let edition_account = &ctx.accounts.edition_account;
+        let edition_mark_pda = &ctx.accounts.edition_mark_pda;
+        let token_program = &ctx.accounts.token_program;
+        let token_metadata_program = &ctx.accounts.token_metadata_program;
+
+        let instruction = mpl_instruction::burn_edition_nft(
+            TOKEN_METADATA_ID, 
+            edition_metadata_account.key(), 
+            nft_owner.key(), 
+            edition_mint.key(), 
+            master_edition_mint.key(), 
+            edition_token_account.key(), 
+            master_edition_token_account.key(), 
+            master_edition_account.key(), 
+            edition_account.key(), 
+            edition_mark_pda.key(), 
+            token_program.key(),
+        );
+
+        invoke(&instruction, &[
+            edition_metadata_account.to_account_info(),
+            nft_owner.to_account_info(),
+            edition_mint.to_account_info(),
+            master_edition_mint.to_account_info(),
+            edition_token_account.to_account_info(),
+            master_edition_token_account.to_account_info(),
+            master_edition_account.to_account_info(),
+            edition_account.to_account_info(),
+            edition_mark_pda.to_account_info(),
+            token_program.to_account_info(),
+            token_metadata_program.to_account_info(),
+        ]).expect("CPI failed");
+
+        Ok(())
+    }
+
+    pub fn burn_master_edition_nft(ctx: Context<BurnMasterEditionContext>) -> Result<()> {
+        let master_edition_metadata = &ctx.accounts.master_edition_metadata;
+        let owner = &ctx.accounts.owner;
+        let master_edition_mint = &ctx.accounts.master_edition_mint;
+        let master_edition_token_account = &ctx.accounts.master_edition_token_account;
+        let master_edition_account = &ctx.accounts.master_edition_account;
+        let token_program = &ctx.accounts.token_program;
+        let token_metadata_program = &ctx.accounts.token_metadata_program;
+
+        let instruction = mpl_instruction::burn_nft(
+            TOKEN_METADATA_ID, 
+            master_edition_metadata.key(), 
+            owner.key(), 
+            master_edition_mint.key(), 
+            master_edition_token_account.key(), 
+            master_edition_account.key(), 
+            token_program.key(),
+            None,
+        );
+
+        invoke(&instruction, &[
+            master_edition_metadata.to_account_info(),
+            owner.to_account_info(),
+            master_edition_mint.to_account_info(),
+            master_edition_token_account.to_account_info(),
+            master_edition_account.to_account_info(),
+            token_program.to_account_info(),
+            token_metadata_program.to_account_info(),
+        ]).expect("CPI failed");
+
+        Ok(())
+    }
+
 
 }
 

@@ -9,6 +9,7 @@ import {
 } from '@solana/spl-token';
 import { Connection, LAMPORTS_PER_SOL, SystemProgram } from "@solana/web3.js";
 import { findProgramAddressSync } from "@project-serum/anchor/dist/cjs/utils/pubkey";
+import { Metadata } from '@metaplex-foundation/mpl-token-metadata';
 
 describe("mint-nft", () => {
   // Configure the client to use the local cluster.
@@ -31,6 +32,10 @@ describe("mint-nft", () => {
   let editionMintAddress: anchor.web3.Keypair;
   let recipientEditionOwner: anchor.web3.Keypair;
   let recipientATA: anchor.web3.PublicKey;
+  let editionMetadataAddress: anchor.web3.PublicKey;
+  let editionAddress: anchor.web3.PublicKey;
+  let editionMarkPda: anchor.web3.PublicKey;
+  let editionMarkBump: number;
 
   const connection = new Connection('https://api.devnet.solana.com', 'confirmed');
   
@@ -43,10 +48,8 @@ describe("mint-nft", () => {
       mint: mintKeypair.publicKey,
       owner: root.publicKey
     });
-    console.log(`New token: ${mintKeypair.publicKey}`);
-    console.log(`New token address: ${rootATA}`);
-    // const mintInfo = await getMint(connection, mintKeypair.publicKey);
-    // console.log(`Mint info:`, mintInfo);
+    console.log(`New token (mint): ${mintKeypair.publicKey}`);
+    console.log(`New token associated account: ${rootATA}`);
   })
 
   it('Create Mint account', async () => {
@@ -56,10 +59,6 @@ describe("mint-nft", () => {
       tokenProgram: TOKEN_PROGRAM_ID,
     }).signers([mintKeypair, root]).rpc();
     console.log(`Create mint account tx:`, tx);
-    await new Promise(f => setTimeout(f, 100));
-    
-    // const mintInfo = await getMint(connection, mintKeypair.publicKey);
-    // console.log(`Mint info:`, mintInfo);
   });
 
   it('Initialize Mint account', async () => {
@@ -176,7 +175,12 @@ describe("mint-nft", () => {
       metadataAccount: metadataAddress,
     }).signers([root]).rpc().catch(e => console.log(e));
     console.log(`Create metadata account tx:`, tx);
-  })
+  });
+
+  it('Get metadata address info', async () => {
+    const metadataInfo = await Metadata.fromAccountAddress(connection, metadataAddress);
+    console.log(`Metadata by owner:`, metadataInfo);
+  });
 
   it('Create edition account', async () => {
 
@@ -232,17 +236,17 @@ describe("mint-nft", () => {
     console.log('Recipient ATA', recipientATAAmount.amount);
 
     // Create edition account
-    const editionMetadataAddress = anchor.web3.PublicKey.findProgramAddressSync(
-      [
-        Buffer.from('metadata'),
-        TOKEN_METADATA_PROGRAM_ID.toBuffer(),
-        editionMintAddress.publicKey.toBuffer(),
-      ], 
-      TOKEN_METADATA_PROGRAM_ID,
-    )[0];
-      console.log(`Edition metadata address:`, editionMetadataAddress.toBase58());
+    editionMetadataAddress = anchor.web3.PublicKey.findProgramAddressSync(
+        [
+          Buffer.from('metadata'),
+          TOKEN_METADATA_PROGRAM_ID.toBuffer(),
+          editionMintAddress.publicKey.toBuffer(),
+        ], 
+        TOKEN_METADATA_PROGRAM_ID,
+      )[0];
+    console.log(`Edition metadata address:`, editionMetadataAddress.toBase58());
 
-    const editionAddress = anchor.web3.PublicKey.findProgramAddressSync(
+    editionAddress = anchor.web3.PublicKey.findProgramAddressSync(
       [
         Buffer.from('metadata'),
         TOKEN_METADATA_PROGRAM_ID.toBuffer(),
@@ -264,7 +268,7 @@ describe("mint-nft", () => {
     console.log(`Mint token to ATA tx:`, mintTx);
 
     const encoder = new TextEncoder();
-    const [editionMarkPda, editionMarkBump] = findProgramAddressSync([
+    [editionMarkPda, editionMarkBump] = findProgramAddressSync([
         encoder.encode('metadata'),
         TOKEN_METADATA_PROGRAM_ID.toBuffer(),
         mintKeypair.publicKey.toBuffer(),
@@ -287,7 +291,7 @@ describe("mint-nft", () => {
       tokenAccount: rootATA,
       editionUpdateAuthority: recipientEditionOwner.publicKey,
       metadataAccount: metadataAddress,
-      metadataMint: mintKeypair.publicKey,
+      metadataMint: mintKeypair.publicKey, // Mint of Master edition
       tokenMetadataProgram: TOKEN_METADATA_PROGRAM_ID,
       tokenProgram: TOKEN_PROGRAM_ID,
       systemProgram: SystemProgram.programId,
@@ -296,5 +300,35 @@ describe("mint-nft", () => {
     .rpc();
     console.log(`Create edition account tx:`, tx);
   });
+
+  it('Burn edition', async () => {
+    const tx = await program.methods.burnEditionNft().accounts({
+      editionMetadataAccount: editionMetadataAddress,
+      nftOwner: recipientEditionOwner.publicKey,
+      editionMint: editionMintAddress.publicKey,
+      masterEditionMint: mintKeypair.publicKey,
+      editionTokenAccount: recipientATA,
+      masterEditionTokenAccount: rootATA,
+      masterEditionAccount: masterEditionAddress,
+      editionAccount: editionAddress,
+      editionMarkPda: editionMarkPda,
+      tokenProgram: TOKEN_PROGRAM_ID,
+      tokenMetadataProgram: TOKEN_METADATA_PROGRAM_ID,
+    }).signers([recipientEditionOwner]).rpc().catch(e => console.log(e));
+    console.log(`Burn edition tx:`, tx);
+  });
+
+  it('Burn master edition', async () => {
+    const tx = await program.methods.burnMasterEditionNft().accounts({
+      masterEditionMetadata: metadataAddress,
+      masterEditionAccount: masterEditionAddress,
+      masterEditionMint: mintKeypair.publicKey,
+      masterEditionTokenAccount: rootATA,
+      owner: root.publicKey,
+      tokenProgram: TOKEN_PROGRAM_ID,
+      tokenMetadataProgram: TOKEN_METADATA_PROGRAM_ID,
+    }).signers([root]).rpc().catch(e => console.log(e));
+    console.log(`Burn master edition tx:`, tx);
+  })
 
 });

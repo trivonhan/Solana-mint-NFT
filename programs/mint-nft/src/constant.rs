@@ -1,5 +1,3 @@
-use std::env::consts;
-
 use anchor_lang::prelude::*;
 
 #[constant]
