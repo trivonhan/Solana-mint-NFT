@@ -5,6 +5,7 @@ import { SolanaConfigService } from '@coin98/solana-support-library/config'
 import { TOKEN_PROGRAM_ID } from "@project-serum/anchor/dist/cjs/utils/token";
 import * as ssl from "@coin98/solana-support-library"
 import {
+  Account,
   getMint, getOrCreateAssociatedTokenAccount,
 } from '@solana/spl-token';
 import { Connection, LAMPORTS_PER_SOL, SystemProgram } from "@solana/web3.js";
@@ -36,6 +37,13 @@ describe("mint-nft", () => {
   let editionAddress: anchor.web3.PublicKey;
   let editionMarkPda: anchor.web3.PublicKey;
   let editionMarkBump: number;
+
+  let recipientATAForMasterEdition: Account;
+
+  // Delegate account
+  let delegateAccount: anchor.web3.PublicKey;
+  let delegateBump: number;
+
 
   const connection = new Connection('https://api.devnet.solana.com', 'confirmed');
   
@@ -69,9 +77,6 @@ describe("mint-nft", () => {
     }).signers([mintKeypair, root]).rpc();
     await new Promise(f => setTimeout(f, 100));
     console.log(`Initialize mint account tx:`, tx);
-
-    const mintInfo = await getMint(connection, mintKeypair.publicKey);
-    console.log(`Mint info:`, mintInfo);
   });
 
   it('Create ATA', async () => {
@@ -301,34 +306,76 @@ describe("mint-nft", () => {
     console.log(`Create edition account tx:`, tx);
   });
 
-  it('Burn edition', async () => {
-    const tx = await program.methods.burnEditionNft().accounts({
-      editionMetadataAccount: editionMetadataAddress,
-      nftOwner: recipientEditionOwner.publicKey,
-      editionMint: editionMintAddress.publicKey,
-      masterEditionMint: mintKeypair.publicKey,
-      editionTokenAccount: recipientATA,
-      masterEditionTokenAccount: rootATA,
-      masterEditionAccount: masterEditionAddress,
-      editionAccount: editionAddress,
-      editionMarkPda: editionMarkPda,
+  it("Delegate NFT to PDA", async () => {
+    
+    [delegateAccount, delegateBump] = findProgramAddressSync(
+      [
+        Buffer.from("delegate_nft"),
+        Buffer.from("signer"),
+      ],
+      program.programId,
+    );
+    console.log(`Delegate account:`, delegateAccount.toBase58());
+    const tx = await program.methods.delegateAccount(new anchor.BN(1)).accounts({
+      sourceAccount: rootATA,
+      delegateAccount,
       tokenProgram: TOKEN_PROGRAM_ID,
-      tokenMetadataProgram: TOKEN_METADATA_PROGRAM_ID,
-    }).signers([recipientEditionOwner]).rpc().catch(e => console.log(e));
-    console.log(`Burn edition tx:`, tx);
+      signer: root.publicKey,
+    }).signers([root]).rpc().catch(e => console.log(e));
+
+    console.log(`Delegate NFT to PDA tx:`, tx);
   });
 
-  it('Burn master edition', async () => {
-    const tx = await program.methods.burnMasterEditionNft().accounts({
-      masterEditionMetadata: metadataAddress,
-      masterEditionAccount: masterEditionAddress,
-      masterEditionMint: mintKeypair.publicKey,
-      masterEditionTokenAccount: rootATA,
-      owner: root.publicKey,
+  it("PDA delegated transfer NFT to recipient", async () => {
+
+    // Create ATA for recipient
+    recipientATAForMasterEdition = await getOrCreateAssociatedTokenAccount(
+      connection,
+      recipientEditionOwner,
+      mintKeypair.publicKey,
+      recipientEditionOwner.publicKey
+    );
+    
+    console.log(`Recipient ATA for master edition:`, recipientATAForMasterEdition.address.toBase58());
+
+    const tx = await program.methods.transferFromDelegate(new anchor.BN(1),delegateBump).accounts({
+      sourceAccount: rootATA,
+      destinationAccount: recipientATAForMasterEdition.address,
+      delegateAccount,
       tokenProgram: TOKEN_PROGRAM_ID,
-      tokenMetadataProgram: TOKEN_METADATA_PROGRAM_ID,
     }).signers([root]).rpc().catch(e => console.log(e));
-    console.log(`Burn master edition tx:`, tx);
-  })
+
+    console.log(`PDA transfer NFT to recipient tx:`, tx);
+  });
+
+  // it('Burn edition', async () => {
+  //   const tx = await program.methods.burnEditionNft().accounts({
+  //     editionMetadataAccount: editionMetadataAddress,
+  //     nftOwner: recipientEditionOwner.publicKey,
+  //     editionMint: editionMintAddress.publicKey,
+  //     masterEditionMint: mintKeypair.publicKey,
+  //     editionTokenAccount: recipientATA,
+  //     masterEditionTokenAccount: rootATA,
+  //     masterEditionAccount: masterEditionAddress,
+  //     editionAccount: editionAddress,
+  //     editionMarkPda: editionMarkPda,
+  //     tokenProgram: TOKEN_PROGRAM_ID,
+  //     tokenMetadataProgram: TOKEN_METADATA_PROGRAM_ID,
+  //   }).signers([recipientEditionOwner]).rpc().catch(e => console.log(e));
+  //   console.log(`Burn edition tx:`, tx);
+  // });
+
+  // it('Burn master edition', async () => {
+  //   const tx = await program.methods.burnMasterEditionNft().accounts({
+  //     masterEditionMetadata: metadataAddress,
+  //     masterEditionAccount: masterEditionAddress,
+  //     masterEditionMint: mintKeypair.publicKey,
+  //     masterEditionTokenAccount: rootATA,
+  //     owner: root.publicKey,
+  //     tokenProgram: TOKEN_PROGRAM_ID,
+  //     tokenMetadataProgram: TOKEN_METADATA_PROGRAM_ID,
+  //   }).signers([root]).rpc().catch(e => console.log(e));
+  //   console.log(`Burn master edition tx:`, tx);
+  // })
 
 });

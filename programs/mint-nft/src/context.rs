@@ -281,3 +281,50 @@ pub struct BurnMasterEditionContext<'info> {
     /// CHECK: Metaplex will check this
     pub token_metadata_program: UncheckedAccount<'info>,
 }
+
+#[derive(Accounts)]
+pub struct DelegateNftContext<'info> {
+
+    /// CHECK: NFT associated token account
+    #[account(mut)]
+    pub source_account: AccountInfo<'info>,
+
+    /// CHECK: Delegate account can get NFT from your account
+    #[account(
+        mut,
+        seeds = [b"delegate_nft", b"signer"],
+        bump
+    )]
+    pub delegate_account: UncheckedAccount<'info>,
+
+    #[account(mut)]
+    pub signer: Signer<'info>,
+
+    /// CHECK: Token program ID (default = TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA)
+    pub token_program: AccountInfo<'info>,
+
+}
+
+#[derive(Accounts)]
+pub struct TransferFromDelegateAccountContext<'info> {
+
+    /// CHECK: NFT associated token account
+    #[account(mut)]
+    pub source_account: AccountInfo<'info>,
+
+    /// CHECK: Destination account
+    #[account(mut)]
+    pub destination_account: AccountInfo<'info>,
+
+    /// CHECK: Delegate account can get NFT from your account
+    #[account(
+        mut,
+        seeds = [b"delegate_nft", b"signer"],
+        bump
+    )]
+    pub delegate_account: UncheckedAccount<'info>,
+
+    /// CHECK: Token program ID (default = TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA)
+    pub token_program: AccountInfo<'info>,
+
+}

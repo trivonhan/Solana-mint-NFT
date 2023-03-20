@@ -31,6 +31,18 @@ use crate::{
 declare_id!("4jec8qCRTawG5e1nEc1eTMpXNvyF3j3K8eoD6jTzYeoH");
 
 #[derive(AnchorSerialize, AnchorDeserialize, Default)]
+pub struct MintToTokenParams {
+    pub instruction: u8,
+    pub amount: u64,
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Default)]
+pub struct ApproveTokenParams {
+    pub instruction: u8,
+    pub amount: u64,
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Default)]
 pub struct TransferTokenParams {
     pub instruction: u8,
     pub amount: u64,
@@ -38,6 +50,8 @@ pub struct TransferTokenParams {
 
 #[program]
 pub mod mint_nft {
+    use anchor_lang::solana_program::program::invoke_signed;
+
     use super::*;
 
     pub fn create_mint_account(ctx: Context<CreateMintAccountContext>) -> Result<()> {
@@ -97,7 +111,7 @@ pub mod mint_nft {
         let authority = &ctx.accounts.authority;
         let token_program = &ctx.accounts.token_program;
 
-        let data = TransferTokenParams {
+        let data = MintToTokenParams {
             instruction: 7,
             amount,
         };
@@ -364,6 +378,87 @@ pub mod mint_nft {
         Ok(())
     }
 
+    pub fn delegate_account(ctx: Context<DelegateNftContext>, amount: u64) -> Result<()> {
 
+        let source_account = &ctx.accounts.source_account;
+        let delegate_account = &ctx.accounts.delegate_account;
+        let signer = &ctx.accounts.signer;
+        let token_program = &ctx.accounts.token_program;
+
+        let data = ApproveTokenParams {
+            instruction: 4,
+            amount
+        };
+
+        let data = data.try_to_vec().unwrap();
+
+        let accounts = vec![
+            AccountMeta::new(*source_account.key, false),
+            AccountMeta::new(*delegate_account.key, false),
+            AccountMeta::new_readonly(*signer.key, true),
+        ];
+
+        let instruction = Instruction {
+            program_id: *token_program.key,
+            accounts,
+            data,
+        };
+
+        msg!("DEBUG: Delegate account instruction {:?}", instruction);
+
+        invoke(&instruction, &[
+            source_account.clone(),
+            delegate_account.to_account_info().clone(),
+            signer.to_account_info().clone(),
+            token_program.clone()
+        ]).expect("CPI failed");
+
+       Ok(())
+    }
+
+    pub fn transfer_from_delegate(ctx: Context<TransferFromDelegateAccountContext>, amount: u64, _bump: u8) -> Result<()> {
+
+        let source_account = &ctx.accounts.source_account;
+        let delegate_account = &ctx.accounts.delegate_account;
+        let destination_account = &ctx.accounts.destination_account;
+        let token_program = &ctx.accounts.token_program;
+
+        let seed : &[&[u8]] = &[
+            b"delegate_nft".as_ref(), 
+            b"signer".as_ref(), 
+            &[_bump]
+        ];
+
+        let data = TransferTokenParams {
+            instruction: 3,
+            amount
+        };
+
+        let data = data.try_to_vec().unwrap();
+
+        let accounts = vec![
+            AccountMeta::new(*source_account.key, false),
+            AccountMeta::new(*destination_account.key, false),
+            AccountMeta::new(*delegate_account.key, true),
+        ];
+
+        let instruction = Instruction {
+            program_id: *token_program.key,
+            accounts,
+            data,
+        };
+
+        msg!("DEBUG: Transfer from delegate account instruction {:?}", instruction);
+
+        invoke_signed(&instruction, &[
+            source_account.clone(),
+            destination_account.clone(),
+            delegate_account.to_account_info().clone(),
+            token_program.clone()
+        ],
+            &[&seed],
+        ).expect("CPI failed");
+        Ok(())
+    }
 }
 
